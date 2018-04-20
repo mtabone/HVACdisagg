@@ -26,7 +26,7 @@ The figure below displays examples of different model forms fit to daily and hou
 
 ![very good](figures/examples.png)
 - **Daily vs Hourly** data are altered by pre-prossessing the dataframe used as the `data` input.
-= **Latent State** models are created by setting `coolingState` to `TRUE`, the cooling state is a binary variable, realized each timestep, that defines whether temperature responsiveness is present above the change point. The **Change Point Only** results when `coolingState` is `FALSE`.  Analogously `heatingState` is used to create a latent state for whether heating systems are active.
+- **Latent State** models are created by setting `coolingState` to `TRUE`, the cooling state is a binary variable, realized each timestep, that defines whether temperature responsiveness is present above the change point. The **Change Point Only** results when `coolingState` is `FALSE`.  Analogously `heatingState` is used to create a latent state for whether heating systems are active.
 - **KDE vs Normal** density estimates for errors are set in the `emisShape` input which can take the value `kernel` for a kernel density estimate of the shape or `normal` for a normal distribution estimate.  
 - **Continuous, Intercept, and Quadratic** models are set using the `coolingIntercept` and `coolSqTemp` inputs respectively. Each input takes a boolean value. In the figure, **continuous** corresponds to neither an intercept or a square term, **intercept** corresponds to only an intercept term, and **quadratic** corresponds to both an intercept and a square term.
 
