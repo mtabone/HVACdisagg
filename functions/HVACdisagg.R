@@ -1,16 +1,37 @@
 ## ClassModelFitFuns.r
-## Contains a function to fit Mark Dyson's hourly classification model 
 
-## Updated to also fit change-point models by restricting the probability of
-## Updated to fit models with out any heating or cooling, and to fit models with 
-## both heatinga and cooling.
+#' Add together two numbers
+#'
+#' @param Data dataframe containing the dependent column. 
+#' @param ChangePoints A dataframe of changepoints to try, must be a two column array if fitting heating and cooling. Columns must be labeled cool and heat.
+#' @param numIters maximum number of iterations
+#' @param convCrit convergence criteria for the model, it is defines in terms of fraction of changed classifications 
+#' compared to all "on" classifications.  If the fraction of changed classifications in a given iteration is 
+#' below the criteria, then the algorithm ceases.
+#' @param dependentColName name of the column in `data` which stores the dependent variable. (Typically power consumption)
+#' @param CPcolname name of the column in `data` which exhibits the change point (Typically ourdoor temperature)
+#' @param otherRegressors, formula string, regressors used to predict non-HVAC load
+#' @param emisShape, canonical shape for the probability distribution of model emissions (errors), can take the values 'kernel', or 'normal'.
+#' @param coolingIntercept, logical, if TRUE, an intercept is included in the cooling model
+#' @param heatingIntercept, logical, if TRUE, and intercept is included in the heating model
+#' @param coolingState, logical, if TRUE, a binary latent state is included to classify whether cooling is active at each time
+#' @param heatingState, logical, if TRUE, a binary latent state is included to classify whether heating is active
+#' @param coolSqTmp, logical, should squared temperature be included as a cooling regressor
+#' @param heatSqTmp, logical, should squared temperature be included as a heating regressor
+#' @param storeall, logical, should the function store results for fits to all change point, if FALSE, only the model for the most likely changepoint is stored.
+#' @param verbose, logical, print selected outputs. 
+#' @param class_model = T
+#' @return 
+#' @examples
+#' add(1, 1)
+#' add(10, 1)
 
 classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIters = 100, convCrit = .005, 
                           dependentColName = 'powerAve', CPColName = 'outTemp', 
                           otherRegressors = 'HOD:dayType', emisShape = 'normal',
                           coolingIntercept = FALSE, heatingIntercept = FALSE, 
                           coolingState = FALSE, heatingState = FALSE,
-                          storeall = TRUE, verbose= F, class_model = T,
+                          storeall = TRUE, verbose= F, 
                           heatSqTmp = FALSE, coolSqTmp = FALSE){
   ## classModelFit inputs a data.frame of hourly energy use (household or AC) and hourly outdoor temperature and 
   # a set of change points (below which the AC is never "ON") and fits a classification which distinguishes between times when 
@@ -21,11 +42,6 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #                         dependentColName,    default to "powerAve"   for average power during the hour, and 
   #                         CPColName,           default to "outTemp"    for average outdoor temperature. 
   #                         otherRegressors      default contains "HOD," and "dayType"  
-  #     dataUnit**       : ** GETTING RID OF THIS FROM NOW ONLY ALL DATA IN THE SAME TIMESCALE OR AVERAGED
-  #                         Data corresponding tot he units of analysis, which can be at a longer time resolution than those in data
-  #                         otherRegressors  should be stored here if unitLength is not 1.
-  #     unitLength**     : ** no longer available  The length of the unit of analysis, the number of rows of dataUnit must be the number of rows of Data divided by unitLength
-  #
   #     dependentColName : Column name of the dependent variable (in dataUnit or in Data)
   #     CPColName        : Column name of the independent vairable which is affected by the changepoint
   #
@@ -37,7 +53,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #
   #     otherRegressors  : other regressors to include for non-HVAC 
   #
-  #     ChangePoints     :  An dataframe of changepoints to try, must be a two column array if fitting heating and cooling. 
+  #     ChangePoints     :  A dataframe of changepoints to try, must be a two column array if fitting heating and cooling. 
   #                      :  columns must be labeled cool and heat. 
   #
   #     numIters         :  The maximum number of iterations allowed (100)
@@ -57,6 +73,9 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #    'CoolingMode'  : the cooling modes assignment for each hour (one for each changepoint, stored in a list)
   #    'NumIt'        : Number of iterations required for each fit. 
   #
+  
+  # 
+  class_model = heatingState | coolingState
   
   ## Initialize Outputs
   output                   <- list()
@@ -86,7 +105,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   output$inputs$heatSqTmp         <- heatSqTmp         # Is sq temp included in the heating model?
   output$inputs$class_model       <- class_model       # Is this a classification model or a change-point model?
   
-
+  
   
   # Cycle through each row of change points run the "EM" algorithm within each *****************************************
   # clgBreakPoints defined outside of function
@@ -380,7 +399,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
     ## Isolate covariates that are associated with cooling
     coolcol  <-  grepl('ClgMode', colnames(X))
     heatcol  <-  grepl('HtMode', colnames(X))
-
+    
     bcool    <-  as.matrix(b[coolcol,])
     bheat    <-  as.matrix(b[heatcol,])
     boff     <-  as.matrix(b[!(coolcol | heatcol),])
@@ -401,7 +420,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
     HeatNeed  <- Xheat %*% bheat
     OtherBar  <- Xoff %*% boff
     PowerPred <- OtherBar + gamma_cool * CoolNeed + gamma_heat * HeatNeed
-
+    
     #Create data.frame of predicted values
     PredVal <- data.frame(ProbOff = gamma_off, ProbCool = rep(0,N), ProbHeat = rep(0,N), Heat = Heat, Cool = Cool, Other = Other, CoolNeed = CoolNeed, HeatNeed = HeatNeed)
     if(coolingState) PredVal$ProbCool <- gamma_cool
@@ -422,7 +441,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
     } else {
       output$prob_cool[[cpi]]            <- rep(0, N)
     }
-
+    
     if(heatingState) {
       output$TunderCP[[cpi]]              <- dataUse$ToverCP
       output$prob_heat[[cpi]]             <- gamma_heat
@@ -469,7 +488,7 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
 }
 
 
-validate_fit <-function( fitout, data, coolcol = 'Ave_Power_Cool' ){
+validateFit <-function( fitout, data, coolcol = 'Ave_Power_Cool' ){
   ## OK THIS OUTPUTS A LOT OF STATISTICS
   # 'Mean_cool_hour'     is the actual average hourly cooling measured by sub-metering
   # 'Mean_cool_day'      is the actual average daily cooling measured at the submeter
@@ -576,110 +595,3 @@ validate_fit <-function( fitout, data, coolcol = 'Ave_Power_Cool' ){
   
   
 }
-
-class_model_store <- function(class_model_fit, times, idrow){
-  ## Function to store a classification model to the database of fits to consert data. 
-  # Relies on a nicely specified table
-  
-  
-  ## Initialize a dataframe with basic data
-  df <- as.data.frame(idrow[,1:4])
-  
-  ## Get model inputs
-  df$coolingState  <- class_model_fit$inputs$coolingState
-  df$heatingState  <- class_model_fit$inputs$heatingState
-  df$heatingIntercept <- class_model_fit$inputs$heatingIntercept * df$heatingState
-  df$coolingIntercept <- class_model_fit$inputs$coolingIntercept * df$coolingState
-  df$heatSqTmp <- class_model_fit$inputs$heatSqTmp * df$heatingState
-  df$coolSqTmp <- class_model_fit$inputs$coolSqTmp * df$coolingState
-  
-  df$otherRegressors  <- class_model_fit$inputs$otherRegressors
-  df$emisShape        <- class_model_fit$inputs$emisShape
-  df$dependentColName <- class_model_fit$inputs$dependentColName
-  df$CPColName        <- class_model_fit$inputs$CPColName
-  df$class_model      <- class_model_fit$inputs$class_model
-  
-  ## find if data are hourly or daily
-  d <- diff(as.numeric(times[1:2]))
-  if (d > 5000) datatime <- 'daily'
-  if (d < 5000) datatime <- 'hourly'
-  
-  df$dailyData <- d > 5000
-  
-  ## make a model name  
-  cm_str <- if (df$class_model) { 'class' } else {'cp'}
-  
-  df$modelname <- paste( cm_str, datatime, df$emisShape, rep('cool', df$coolingState*1), rep('cint',df$coolingIntercept*1) ,rep('cTsq',df$coolSqTmp*1) ,
-                         rep('heat', df$heatingState*1), rep('hint', df$heatingIntercept*1),rep('hTsq',df$heatSqTmp*1) , sep = '_') 
-  
-  df$shortname <- paste( if(df$class_model){"C"}else{"P"},
-                         if(df$dailyData){"D"}else{"H"}, 
-                         if(df$emisShape=='normal'){"N"}else{"K"}, 
-                         if(df$coolingState){paste('_C', rep('1',df$coolingIntercept*1), rep('S',df$coolSqTmp*1), sep = '')} else {''} ,
-                         if(df$heatingState){paste('_H', rep('1',df$heatingIntercept*1), rep('S',df$heatSqTmp*1), sep = '')} else {''} , sep = '') 
-  
-  
-  
-  ## Get correct CP
-  tll <-class_model_fit$totalLL
-  tll[tll==Inf] <- NA
-  k <- which.max( tll )
-  
-  ## 
-  df$totalLL <- class_model_fit$totalLL[k]
-  df$AIC     <- class_model_fit$AIC[k]
-  df$BIC     <- class_model_fit$BIC[k]
-  
-  
-  if(df$coolingState) df$CPcool  <- class_model_fit$CPs$cool[k]
-  if(df$heatingState) df$CPheat  <- class_model_fit$CPs$heat[k]
-  
-  
-  ## Align coefficients
-  coeff <- as.data.frame( t( class_model_fit$coefficients[,k]  ) )
-  
-  ## Sigmas data frame
-  df$sigma_off <- class_model_fit$sigma_off[k]
-  if (df$coolingState) df$sigma_cool <- class_model_fit$sigma_cool[k]
-  if (df$heatingState) df$sigma_heat <- class_model_fit$sigma_heat[k]
-
-  ## validation data.frame 
-  validdf <- class_model_fit$validation
-  
-  # Create fit description
-  
-  df <- cbind(df, coeff)
-  if ( !is.null(validdf) ) df <- cbind(df, validdf)
-  
-  colnames(df) <- ( gsub(':','_',colnames(df)) )
-  
-  ## Create predicted values data frame
-  attr(times, 'tzone') <- 'UTC'
-  valuesdf <- data.frame( VID = df$VID, modelname = df$modelname, dateTime = times)
-  valuesdf <- cbind( valuesdf, class_model_fit$PredictedValues[[k]])
-  valuesdf$ProbCool <- class_model_fit$prob_cool[[k]]*1
-  valuesdf$ProbHeat <- class_model_fit$prob_heat[[k]]*1
-  
-  
-  ## Place in database
-  con <- dbcon_bgrid()
-  
-  examp <- dbGetQuery(con, 'SELECT column_name FROM information_schema.columns WHERE table_schema = \'michaelangelo\' AND table_name   = \'consert_machine_fits_ms\'')
-  nm    <- examp$column_name
-  nmneed <- nm[!is.element(nm,colnames(df))]
-  df[,nmneed] <-NA
-  df <- df[,nm]
-  
-  dbGetQuery(con, 'set time zone \"UTC\"')
-  
-  tryCatch(dbWriteTable(con, name = c('michaelangelo','consert_machine_fits_ms'), value = df, append = T, row.names = F),
-           error = function(e) print(e))
-  
-  tryCatch(dbWriteTable(con, name = c('michaelangelo','consert_machine_fits_ms_tsout'), value = valuesdf, append = T, row.names = F),
-           error = function(e) print(e))    
-  
-  dbDisconnect(con)
-  
-
-}
-

@@ -24,7 +24,6 @@ TrialRun.R requires ggplot2. PecanDataLoad.R requires RPostgreSQL.
 The figure below displays examples of different model forms fit to daily and hourly data.
 
 
-![very good](figures/examples.png)
 - **Daily vs Hourly** data are altered by pre-prossessing the dataframe used as the `data` input.
 - **Latent State** models are created by setting `coolingState` to `TRUE`, the cooling state is a binary variable, realized each timestep, that defines whether temperature responsiveness is present above the change point. The **Change Point Only** results when `coolingState` is `FALSE`.  Analogously `heatingState` is used to create a latent state for whether heating systems are active.
 - **KDE vs Normal** density estimates for errors are set in the `emisShape` input which can take the value `kernel` for a kernel density estimate of the shape or `normal` for a normal distribution estimate.  
@@ -32,6 +31,12 @@ The figure below displays examples of different model forms fit to daily and hou
 
 Inputs to the model include
 data: dataframe containing power consumption data, temperature data, and other load regressors.
+
+![very good](figures/examples.png)
+
+
+### Detailed function description
+
 
 
 ## Authors
