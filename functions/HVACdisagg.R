@@ -1,6 +1,6 @@
 ## ClassModelFitFuns.r
 
-#' Add together two numbers
+#' Help files
 #'
 #' @param Data dataframe containing the dependent column. 
 #' @param ChangePoints A dataframe of changepoints to try, must be a two column array if fitting heating and cooling. Columns must be labeled cool and heat.
@@ -20,19 +20,14 @@
 #' @param heatSqTmp, logical, should squared temperature be included as a heating regressor
 #' @param storeall, logical, should the function store results for fits to all change point, if FALSE, only the model for the most likely changepoint is stored.
 #' @param verbose, logical, print selected outputs. 
-#' @param class_model = T
-#' @return 
-#' @examples
-#' add(1, 1)
-#' add(10, 1)
-
 classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIters = 100, convCrit = .005, 
                           dependentColName = 'powerAve', CPColName = 'outTemp', 
                           otherRegressors = 'HOD:dayType', emisShape = 'normal',
                           coolingIntercept = FALSE, heatingIntercept = FALSE, 
                           coolingState = FALSE, heatingState = FALSE,
                           storeall = TRUE, verbose= F, 
-                          heatSqTmp = FALSE, coolSqTmp = FALSE){
+                          heatSqTmp = FALSE, coolSqTmp = FALSE,
+                          latent_states = FALSE){
   ## classModelFit inputs a data.frame of hourly energy use (household or AC) and hourly outdoor temperature and 
   # a set of change points (below which the AC is never "ON") and fits a classification which distinguishes between times when 
   # the AC is in Cooling Mode (Clg) ON or OFF. 
@@ -44,6 +39,11 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #                         otherRegressors      default contains "HOD," and "dayType"  
   #     dependentColName : Column name of the dependent variable (in dataUnit or in Data)
   #     CPColName        : Column name of the independent vairable which is affected by the changepoint
+  #     otherRegressors  : other regressors to include for non-HVAC 
+  #     
+  #     coolingState     : logical, whether to include a state for cooling
+  #     heatingState     : logical, whether to include a state for heating
+  #     latent_states    : logical, default FALSE, whether to classify cooling and heating states as random variables: TRUE for latent state models, FALSE for change point only models
   #
   #     coolingIntercept : whether to provide a separate intercept when switching between ON/OFF states of Cooling
   #     heatingIntercept : whether to provide a separate intercept when switching between ON/OFF states of Heating
@@ -51,7 +51,6 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #     coolSqTmp        : logical, whether to include squared temperature in cooling model
   #     heatSqTmp        : logical, whether to include squared temperature in cooling model
   #
-  #     otherRegressors  : other regressors to include for non-HVAC 
   #
   #     ChangePoints     :  A dataframe of changepoints to try, must be a two column array if fitting heating and cooling. 
   #                      :  columns must be labeled cool and heat. 
@@ -72,10 +71,23 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
   #    'TotalLLs'     : the total log likelihood (one for each changepoint, stored in an array)  
   #    'CoolingMode'  : the cooling modes assignment for each hour (one for each changepoint, stored in a list)
   #    'NumIt'        : Number of iterations required for each fit. 
-  #
+  # prob_cool   : ordered list with one element for each CP.  Values are vectors defining the probability of cooling at each time
+  # prob_heat   : ordered list with one element for each CP.  Values are vectors defining the probability of heating at each time
+  # Fcool       : fraction of time above cooling changepoint that the system is cooling. 
+  # Fheat       : fraction of time below heating changepoint that the system is heating 
+  # sigmaCool   : standard deviation of residuals when cooling is active 
+  # sigmaHeat   : standard deviation of residuals when heating is active 
+  # sigmaOff    : standard deviation of residuals when neither heating or cooling are active.  
+  # AIC         : vector, AIC value of fit at each changepoint
+  # BIC         : vector, BIC value of fit at each changepoint
+  # k           : vector, model order at each changepoint
+  # coefficients: matrix, one column for each changepoint, rows contain model coefficients. 
+  # PredictedValues : ordered list with one element for each CP.  Values data frmes of predicted heating, cooling, and other energy uses. 
+  # kernels     : if using KDE estimates for error distributions, these values contain density functions for these kernels
   
-  # 
-  class_model = heatingState | coolingState
+  
+  # reset naming convention
+  class_model = latent_states
   
   ## Initialize Outputs
   output                   <- list()
@@ -433,6 +445,8 @@ classModelFit <- function(Data , ChangePoints = matrix(c(50,70),ncol = 2), numIt
     ## STORAGE OF CONVERGED REGRESSION  ************************************************************************************
     # Save this result in case it turns out to be the best CP (remember, we run EM on a number of change points)
     # refModels are the outputs of LM, dataUses include the cooling mode assignments.  
+    
+    
     if(coolingState) {
       output$ToverCP[[cpi]]              <- dataUse$ToverCP
       output$prob_cool[[cpi]]            <- gamma_cool
